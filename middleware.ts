@@ -4,28 +4,37 @@ import { NextResponse, type NextRequest } from 'next/server';
 const HERKESE_ACIK = ['/giris', '/auth'];
 
 export async function middleware(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anahtar = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Değişkenler eksikse middleware çökmesin, anlaşılır bir mesaj dönsün
+  if (!supabaseUrl || !anahtar) {
+    return new NextResponse(
+      'Yapılandırma eksik: NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY ' +
+        'tanımlı değil. Vercel → Settings → Environment Variables kontrol edip ' +
+        'projeyi yeniden deploy edin.',
+      { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
+  const supabase = createServerClient(supabaseUrl, anahtar, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
       },
-    }
-  );
+      setAll(
+        cookiesToSet: { name: string; value: string; options: CookieOptions }[]
+      ) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
 
   // Oturumu tazeler (bu satır kaldırılmamalı)
   const {
