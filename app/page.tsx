@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import YuklemeKarti from '@/components/YuklemeKarti';
 import DosyaListesi from '@/components/DosyaListesi';
@@ -20,19 +21,31 @@ export default async function Panel() {
 
   if (!user) redirect('/giris');
 
-  const [{ data: benimProfilim }, { data: profiller }, { data: dosyalar }] =
-    await Promise.all([
-      supabase.from('profiller').select('*').eq('id', user.id).single(),
-      supabase.from('profiller').select('*').eq('aktif', true).order('ad_soyad'),
-      supabase
-        .from('dosyalar')
-        .select('*')
-        .order('created_at', { ascending: false }),
-    ]);
+  const { data: benimProfilim } = await supabase
+    .from('profiller')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  const profil = benimProfilim as Profil | null;
+
+  // Onaylanmamış veya erişimi kapatılmış kullanıcı panele giremez
+  if (!profil || profil.onay_durumu !== 'onayli' || !profil.aktif) {
+    redirect('/onay-bekliyor');
+  }
+
+  const [{ data: profiller }, { data: dosyalar }] = await Promise.all([
+    supabase
+      .from('profiller')
+      .select('*')
+      .eq('aktif', true)
+      .eq('onay_durumu', 'onayli')
+      .order('ad_soyad'),
+    supabase.from('dosyalar').select('*').order('created_at', { ascending: false }),
+  ]);
 
   const ekip = (profiller || []) as Profil[];
-  const profil = benimProfilim as Profil | null;
-  const rol = profil?.rol ?? 'stajyer';
+  const rol = profil.rol;
   const yonetici = rol === 'yonetici';
 
   const { data: izinler } = await supabase
@@ -66,7 +79,7 @@ export default async function Panel() {
 
   const benimSayim = satirlar.filter((d) => d.sahip_id === user.id).length;
   const toplamBoyut = satirlar.reduce((t, d) => t + (d.boyut || 0), 0);
-  const adSoyad = profil?.ad_soyad || user.email || '';
+  const adSoyad = profil.ad_soyad || user.email || '';
 
   return (
     <>
@@ -84,6 +97,14 @@ export default async function Panel() {
             <strong>{adSoyad}</strong>
             <span>{rol}</span>
           </div>
+          {yonetici && (
+            <Link href="/kullanicilar" className="cikis-btn">
+              Kullanıcılar
+            </Link>
+          )}
+          <Link href="/sifre-belirle?yenile=1" className="cikis-btn">
+            Şifre değiştir
+          </Link>
           <form action="/auth/cikis" method="post">
             <button type="submit" className="cikis-btn">
               Çıkış

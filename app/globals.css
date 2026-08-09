@@ -378,6 +378,27 @@ input[type='checkbox'] {
   background: rgba(255, 255, 255, 0.1);
 }
 
+a.cikis-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.form-satir {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 620px) {
+  .form-satir {
+    grid-template-columns: 1fr;
+  }
+  .kullanici {
+    flex-wrap: wrap;
+  }
+}
+
 .icerik {
   max-width: 1180px;
   margin: 0 auto;

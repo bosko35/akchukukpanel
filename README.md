@@ -1,34 +1,40 @@
 # AKC Hukuk — Dosya Paylaşım Paneli
 
-Next.js 15 + Supabase + Vercel. Davet edilen kullanıcılar ilk girişi maildeki linkle
-yapar, kendi şifresini belirler, sonraki girişlerde şifreyle girer. Tek dosya veya
-klasörün tamamı yüklenebilir; dosyalar varsayılan olarak herkese açık, istenirse
-kişi bazlı gizli.
+Next.js 15 + Supabase + Vercel. **Hiç e-posta göndermez** — kullanıcı kayıt olur,
+yönetici onaylar, giriş şifreyle yapılır. Tek dosya veya klasörün tamamı
+yüklenebilir; dosyalar varsayılan olarak herkese açık, istenirse kişi bazlı gizli.
 
-**Maliyet:** Supabase Free (500 MB veritabanı, 1 GB dosya, aylık ~3.000 giriş maili) +
-Vercel Hobby = **0 ₺**. Alan büyüyünce Supabase Pro ~25 $/ay.
+**Maliyet:** Supabase Free (500 MB veritabanı, 1 GB dosya) + Vercel Hobby = **0 ₺**.
+Alan büyüyünce Supabase Pro ~25 $/ay. SMTP/mail servisi gerekmez.
 
 ---
 
 ## Giriş akışı
 
 ```
-Yönetici Supabase'den kullanıcıyı davet eder
+Kişi /kayit → ad soyad + e-posta + şifre
         ↓
-Kullanıcı /giris → "İlk giriş / şifremi unuttum" → mailine link gelir
+Hesap "onay bekliyor" durumunda oluşur, panele giremez
         ↓
-Linke tıklar → /sifre-belirle → ad soyad + şifre belirler
+Yönetici /kullanicilar → rolü seçer → Onayla
         ↓
-Bundan sonra /giris → e-posta + şifre
+Kişi /giris → e-posta + şifre ile girer
 ```
 
-Giriş linki **sadece Supabase Authentication → Users listesinde kayıtlı maillere**
-gider. Kayıtlı olmayan biri mailini yazarsa link gönderilmez, uyarı görür
-(`shouldCreateUser: false`). Şifresini belirlemeyen kullanıcı panele giremez,
-middleware onu `/sifre-belirle` sayfasına yönlendirir.
+Alternatif: yönetici `/kullanicilar` ekranından **doğrudan hesap açabilir**
+(mail + geçici şifre girer, hesap onaylı olarak oluşur, şifreyi kişiye kendisi
+iletir).
 
-Şifre sıfırlama için ayrı bir ekran yok — kullanıcı yine "şifremi unuttum" ile
-link ister, girer, yeni şifresini belirler.
+**Şifre sıfırlama:** e-posta gönderilmediği için sıfırlama linki yoktur. Yönetici
+`/kullanicilar` ekranından "Şifre sıfırla" der, sistem okunabilir bir geçici şifre
+üretir, yönetici bunu kişiye iletir. Kullanıcı da üstteki "Şifre değiştir"
+bağlantısından kendi şifresini değiştirebilir.
+
+**Erişimi kesme:** "Erişimi kapat" hesabı pasifleştirir (dosyaları durur),
+"Sil" hesabı ve yüklediği dosyaları kalıcı olarak siler.
+
+Onay kontrolü hem sayfa seviyesinde hem RLS'te uygulanır — onaylanmamış bir
+kullanıcı token'ıyla doğrudan API'ye gitse bile hiçbir dosya göremez.
 
 ## Erişim mantığı
 
@@ -40,8 +46,8 @@ Her dosya bir **alana** yüklenir. Alan, klasörün bir üstündeki erişim katm
 | Genel + "belirli kişilerle paylaş" | Yükleyen + seçtiği kişiler + yönetici |
 | **Kişisel alan** (örn. Buğra) | Alan sahibi + yükleyen + yönetici |
 
-Alan listesi Supabase'deki aktif kullanıcılardan otomatik oluşur; yeni kişi davet
-edildiğinde kendi alanı kendiliğinden belirir, kod değişikliği gerekmez.
+Alan listesi onaylı kullanıcılardan otomatik oluşur; yeni kişi onaylandığında
+kendi alanı kendiliğinden belirir, kod değişikliği gerekmez.
 
 Kural veritabanı seviyesinde (Postgres RLS) uygulanır — arayüz baypas edilse bile
 yetkisiz kimse dosyayı çekemez. İndirme linkleri 60 saniye geçerli imzalı linklerdir,
@@ -58,34 +64,31 @@ depolama kovası tamamen kapalıdır. Her indirme `erisim_log` tablosuna yazıl�
 3. **SQL Editor** → `supabase/schema.sql` dosyasının tamamını yapıştır → **Run**
 4. Kurulum zaten yapılmışsa `supabase/` altındaki düzeltme dosyalarını sırayla çalıştır:
    `duzeltme-01-recursion.sql`, `duzeltme-02-klasor-yolu.sql`,
-   `duzeltme-03-alan-ve-degistirme.sql`
+   `duzeltme-03-alan-ve-degistirme.sql`, `duzeltme-04-onay-sistemi.sql`
 5. **Storage** → **New bucket** → isim: `dosyalar`, **Public bucket kapalı olsun**
 6. **Project Settings → API**: `Project URL`, publishable key ve secret key'i kopyala
 
-### 2. Mail şablonu (Türkçeleştirme + doğru link)
+### 2. Auth ayarları
 
-**Authentication → Email Templates → Magic Link**:
+Sistem hiç mail göndermez, SMTP kurulumuna gerek yoktur. Hesaplar sunucu
+tarafında `service_role` ile `email_confirm: true` olarak açılır.
 
-```html
-<h2>AKC Hukuk Paneli</h2>
-<p>Şifrenizi belirlemek için aşağıdaki bağlantıya tıklayın:</p>
-<p>
-  <a href="{{ .SiteURL }}/auth/dogrula?token_hash={{ .TokenHash }}&type=magiclink">
-    Devam et
-  </a>
-</p>
-<p>Bu bağlantı 1 saat geçerlidir. Bu isteği siz yapmadıysanız maili yok sayın.</p>
+**Authentication → Providers → Email**: `Confirm email` **kapalı** olsun.
+(Doğrulama maili gönderilmeyecek; erişim kontrolü yönetici onayıyla yapılıyor.)
+
+**Authentication → URL Configuration → Site URL**: `https://panel.akchukuk.com`
+
+### 2b. İlk yöneticiyi belirle
+
+Kendin `/kayit` üzerinden kayıt ol, sonra SQL Editor'de:
+
+```sql
+update public.profiller
+  set rol = 'yonetici', onay_durumu = 'onayli', aktif = true
+  where eposta = 'seninmailin@akchukuk.com';
 ```
 
-Aynı içeriği **Invite user** şablonuna da koyun (`type=invite` olarak) ki davet
-maili de doğru sayfaya düşsün.
-
-**Authentication → URL Configuration**:
-- Site URL: `https://panel.akchukuk.com`
-- Redirect URLs: `https://panel.akchukuk.com/**` ve `http://localhost:3000/**`
-
-**Authentication → Providers → Email**: `Confirm email` açık, `Enable email signups` kapalı
-(kimse kendi kendine kayıt olamasın — kullanıcıları siz davet edersiniz).
+Bundan sonrasını panelden `/kullanicilar` ekranıyla yönetirsin.
 
 ### 3. Yerelde çalıştırma
 
@@ -126,25 +129,20 @@ tutmak en temizi. SSL Vercel tarafından otomatik gelir.
 
 ---
 
-## Kullanıcı ekleme
+## Kullanıcı yönetimi
 
-Supabase → **Authentication → Users → Invite user** → kurumsal maili gir.
-Kişi davet mailindeki linke tıklayınca profili otomatik oluşur (`rol = stajyer`).
+Tamamı panelden, `/kullanicilar` ekranından yapılır (sadece yönetici görür):
 
-Rol değiştirmek için SQL Editor:
+| İşlem | Nasıl |
+|---|---|
+| Yeni kayıt onaylama | "Onay bekleyenler" listesinde rolü seç → **Onayla** |
+| Doğrudan hesap açma | **Hesap aç** → mail + geçici şifre (otomatik üretilir) |
+| Rol değiştirme | Satırdaki açılır listeden |
+| Şifre sıfırlama | **Şifre sıfırla** → yeni şifre ekranda çıkar, kişiye siz iletirsiniz |
+| Geçici erişim kesme | **Erişimi kapat** (hesap ve dosyalar durur) |
+| Kalıcı silme | **Sil** (hesap + yüklediği dosyalar gider) |
 
-```sql
-update public.profiller set rol = 'avukat'    where eposta = 'eren@akchukuk.com';
-update public.profiller set rol = 'yonetici'  where eposta = 'sen@akchukuk.com';
-```
-
-Ayrılan stajyerin erişimini kesmek için:
-
-```sql
-update public.profiller set aktif = false where eposta = 'stajyer@akchukuk.com';
-```
-
-(Tam kesmek için Authentication → Users → kullanıcıyı sil.)
+Yönetici kendi rolünü düşüremez, kendi hesabını kapatamaz veya silemez.
 
 ---
 
@@ -152,22 +150,31 @@ update public.profiller set aktif = false where eposta = 'stajyer@akchukuk.com';
 
 ```
 app/
-  giris/page.tsx            Şifreyle giriş + "ilk giriş / şifremi unuttum"
-  sifre-belirle/page.tsx    Şifre belirleme (Suspense sarmalayıcı)
-  auth/dogrula/route.ts     Maildeki linkin düştüğü yer
+  giris/page.tsx            E-posta + şifre ile giriş
+  kayit/page.tsx            Herkese açık kayıt (onay bekleyen hesap açar)
+  onay-bekliyor/page.tsx    Onaylanmamış / erişimi kapalı kullanıcı ekranı
+  kullanicilar/page.tsx     Yönetici: onaylama, rol, şifre sıfırlama, silme
+  sifre-belirle/page.tsx    Kendi şifreni değiştirme
   auth/cikis/route.ts       Çıkış
   page.tsx                  Panel (sunucu tarafı veri çekimi + istatistikler)
   api/
+    kayit/                  Mail göndermeden hesap açar (bekliyor durumunda)
+    kullanicilar/           Yönetici: hesap açma
+    kullanicilar/[id]/      Onay, rol, şifre, aktiflik, silme
     yukleme-linki/          İmzalı yükleme linki üretir
     dosyalar/               Kayıt oluşturma
     dosyalar/[id]/          Erişim güncelleme + silme
+    dosyalar/[id]/degistir/ Yeni sürümle değiştirme
     indir/[id]/             Yetki kontrolü + imzalı indirme
+    indirme-linkleri/       Toplu ZIP için imzalı linkler
 components/
-  SifreFormu.tsx            Şifre belirleme formu
-  YuklemeKarti.tsx          Tek dosya / klasör yükleme, ilerleme, gizlilik
-  DosyaListesi.tsx          Sekmeler, arama, kişi & klasör filtresi, gruplama
+  KullaniciYonetimi.tsx     Yönetici ekranı
+  SifreFormu.tsx            Şifre değiştirme formu
+  YuklemeKarti.tsx          Tek dosya / klasör yükleme, ilerleme, alan seçimi
+  DosyaListesi.tsx          Sekmeler, filtreler, gruplama, toplu işlemler
 lib/supabase/               İstemci / sunucu / admin bağlantıları
-middleware.ts               Oturum tazeleme + sayfa & şifre koruması
+lib/yetki.ts                Yönetici doğrulaması (sunucu tarafı)
+middleware.ts               Oturum tazeleme + sayfa koruması
 supabase/schema.sql         Tablolar, RLS, tetikleyiciler
 supabase/duzeltme-*.sql     Sonradan eklenen migration'lar
 ```

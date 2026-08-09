@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const HERKESE_ACIK = ['/giris', '/auth'];
+const HERKESE_ACIK = ['/giris', '/kayit'];
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -44,8 +44,10 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const acik = HERKESE_ACIK.some((p) => path.startsWith(p));
 
+  // Kayıt ucu oturum gerektirmez
+  if (path.startsWith('/api/kayit')) return response;
+
   if (!user && path.startsWith('/api/')) {
-    // API çağrılarında HTML'e yönlendirmek yerine düzgün 401 dön
     return NextResponse.json({ hata: 'Oturum yok' }, { status: 401 });
   }
 
@@ -56,36 +58,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user) {
-    const sifreVar = user.user_metadata?.sifre_belirlendi === true;
-    const sifreSayfasi = path.startsWith('/sifre-belirle');
-
-    // Şifresini belirlememiş kullanıcı sadece şifre sayfasını görebilir
-    if (!sifreVar && !sifreSayfasi && !acik) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/sifre-belirle';
-      url.search = '';
-      return NextResponse.redirect(url);
-    }
-
-    // ?yenile=1 → "şifremi unuttum" akışı, şifresi olan da girebilmeli
-    const yenileme = request.nextUrl.searchParams.get('yenile') === '1';
-
-    if (sifreVar && sifreSayfasi && !yenileme) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/';
-      url.search = '';
-      return NextResponse.redirect(url);
-    }
-
-    if (path === '/giris') {
-      const url = request.nextUrl.clone();
-      url.pathname = sifreVar ? '/' : '/sifre-belirle';
-      url.search = '';
-      return NextResponse.redirect(url);
-    }
+  if (user && acik) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    url.search = '';
+    return NextResponse.redirect(url);
   }
 
+  // Onay kontrolü sayfa/RLS seviyesinde yapılıyor (anlık olsun diye)
   return response;
 }
 
