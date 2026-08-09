@@ -25,7 +25,7 @@ export default async function Panel() {
     .from('profiller')
     .select('*')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   const profil = benimProfilim as Profil | null;
 

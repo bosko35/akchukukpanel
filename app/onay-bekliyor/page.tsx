@@ -12,11 +12,11 @@ export default async function OnayBekliyor() {
 
   if (!user) redirect('/giris');
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('profiller')
     .select('*')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   const profil = data as Profil | null;
 
@@ -53,6 +53,38 @@ export default async function OnayBekliyor() {
             sonra bu sayfayı yenilediğinizde panele girebilirsiniz.
           </div>
         )}
+
+        {/* Teşhis bilgisi — sorun çözülünce kaldırılabilir */}
+        <details style={{ marginBottom: 16 }}>
+          <summary className="soluk" style={{ cursor: 'pointer' }}>
+            Teknik ayrıntı
+          </summary>
+          <pre
+            style={{
+              fontSize: 11.5,
+              background: '#f4f5f7',
+              padding: 10,
+              borderRadius: 8,
+              overflowX: 'auto',
+              marginTop: 8,
+            }}
+          >
+            {JSON.stringify(
+              {
+                oturum_id: user.id,
+                oturum_mail: user.email,
+                profil_bulundu: !!profil,
+                profil_id: profil?.id ?? null,
+                rol: profil?.rol ?? null,
+                onay_durumu: profil?.onay_durumu ?? null,
+                aktif: profil?.aktif ?? null,
+                sorgu_hatasi: error?.message ?? null,
+              },
+              null,
+              2
+            )}
+          </pre>
+        </details>
 
         <form action="/auth/cikis" method="post">
           <button type="submit" className="btn ikincil genis">
