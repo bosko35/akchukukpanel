@@ -2,6 +2,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const HERKESE_ACIK = ['/giris', '/kayit'];
+// Oturumdan bağımsız, her zaman serbest yollar (geçici teşhis)
+const SERBEST = ['/tani'];
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,6 +17,10 @@ export async function middleware(request: NextRequest) {
         'projeyi yeniden deploy edin.',
       { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } }
     );
+  }
+
+  if (SERBEST.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    return NextResponse.next({ request });
   }
 
   let response = NextResponse.next({ request });
