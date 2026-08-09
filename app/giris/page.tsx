@@ -26,7 +26,20 @@ export default function GirisSayfasi() {
     setBekliyor(false);
 
     if (error) {
-      setHata('E-posta veya şifre hatalı.');
+      console.error('[giris] hata:', error);
+      const m = error.message.toLowerCase();
+
+      if (m.includes('invalid login credentials')) {
+        setHata('E-posta veya şifre hatalı.');
+      } else if (m.includes('email not confirmed')) {
+        setHata(
+          'E-posta doğrulanmamış. Supabase → Authentication → Providers → Email → ' +
+            '"Confirm email" ayarını kapatın.'
+        );
+      } else {
+        // Yapılandırma hataları (geçersiz anahtar vb.) burada görünsün
+        setHata(`Giriş yapılamadı: ${error.message}`);
+      }
       return;
     }
 
