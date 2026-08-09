@@ -38,22 +38,36 @@ export async function POST(request: Request) {
   });
 
   if (error || !data.user) {
-    const m = (error?.message || '').toLowerCase();
+    const ham = error?.message || 'bilinmeyen hata';
+    const m = ham.toLowerCase();
+
+    console.error('[kayit] createUser hatası:', ham);
+
+    if (m.includes('already') || m.includes('registered') || m.includes('exists')) {
+      return NextResponse.json(
+        { hata: 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.' },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      {
-        hata: m.includes('already') || m.includes('registered')
-          ? 'Bu e-posta ile zaten bir hesap var. Giriş yapmayı deneyin.'
-          : 'Kayıt oluşturulamadı. Lütfen tekrar deneyin.',
-      },
+      { hata: `Kayıt oluşturulamadı: ${ham}` },
       { status: 400 }
     );
   }
 
   // Trigger profili oluşturur; ad soyadı garantiye alalım
-  await admin
+  const { error: profilHatasi } = await admin
     .from('profiller')
     .update({ ad_soyad: ad_soyad.trim(), onay_durumu: 'bekliyor' })
     .eq('id', data.user.id);
+
+  if (profilHatasi) {
+    console.error('[kayit] profil güncelleme hatası:', profilHatasi.message);
+    return NextResponse.json(
+      { hata: `Hesap açıldı ama profil kaydedilemedi: ${profilHatasi.message}` },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({ tamam: true });
 }
